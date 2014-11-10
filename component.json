@@ -1,0 +1,23 @@
+{
+  "name": "subetha-client-ax",
+  "repository": "bemson/subetha-client-ax",
+  "description": "Define informal protocols with SubEtha messages",
+  "version": "0.0.0-alpha",
+  "keywords": [
+    "subetha",
+    "plugin",
+    "pubsub",
+    "events",
+    "messaging",
+    "protocol"
+  ],
+  "dependencies": {
+    "bemson/subetha": "0.x"
+  },
+  "development": {},
+  "license": "Apache-2.0",
+  "main": "src/subetha-client-ax.js",
+  "scripts": [
+    "src/subetha-client-ax.js"
+  ]
+}
