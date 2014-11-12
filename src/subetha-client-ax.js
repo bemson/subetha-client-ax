@@ -1,12 +1,12 @@
 /*!
- * SubEtha Ad Hoc Exchange  v0.0.0-alpha
+ * SubEtha Ad Hoc-Exchange
  * http://github.com/bemson/subetha-client-ax/
  *
- * Copyright, Bemi Faison
+ * Copyright 2014, Bemi Faison
  * Released under the Apache License
  */
 /* global define, require */
-!function (inAMD, inCJS, Array, Date, Math, JSON, Object, RegExp, scope, undefined) {
+!function (inAMD, inCJS, RegExp, scope, undefined) {
 
   function initSubEthaAX() {
 
@@ -41,11 +41,11 @@
     function startExchange(client, args, pid) {
       var
         xid,
-        type = args[0],
+        phrase = args[0],
         peers,
         peersLn;
 
-      if (!type || typeof type != 'string') {
+      if (!phrase || typeof phrase != 'string') {
         return false;
       }
 
@@ -67,13 +67,13 @@
       xid = guid();
 
       // exit if can't start convo
-      if (!sendExchange( client, xid, pid, 0, type, args.length ? protoSlice.call(args, 1) : [] )) {
+      if (!sendExchange( client, xid, pid, 0, phrase, args.length ? protoSlice.call(args, 1) : [] )) {
         return false;
       }
 
       // track exchange with each message to peer
       while (peersLn--) {
-        setupExchange(client, xid, peers[peersLn]).push(type);
+        setupExchange(client, xid, peers[peersLn]).push(phrase);
       }
 
       return xid;
@@ -124,7 +124,7 @@
       return result;
     }
 
-    function sendExchange(client, xid, pid, idx, type, data) {
+    function sendExchange(client, xid, pid, idx, phrase, data) {
       return client._transmit('exchange',
         pid,
         {
@@ -132,8 +132,8 @@
           xid: xid,
           // starting index
           idx: idx,
-          // first type
-          type: type,
+          // first phrase
+          phrase: phrase,
           // args
           data: data
         }
@@ -227,15 +227,14 @@
         cb = args[args.length - 1];
 
       if (
-        args.length < 2 ||
-        typeof cb != 'function'
+        args.length > 1 &&
+        typeof cb == 'function'
       ) {
-        return false;
+        setupExchange(me);
+        me._ax.cbs[chainPrefix + protoSlice.call(args, 0, -1).join()] = cb;
       }
 
-      setupExchange(me);
-      me._ax.cbs[chainPrefix + protoSlice.call(args, 0, -1).join()] = cb;
-      return true;
+      return me;
     };
 
     // remove callback for message chain
@@ -245,8 +244,7 @@
         args,
         chain,
         cbs,
-        cbKey,
-        result = false;
+        cbKey;
 
       if (protoHas.call(me, '_ax')) {
 
@@ -266,12 +264,12 @@
         // prune all chains prefixed with this regexp
         for (cbKey in cbs) {
           if (chainRxp.test(cbKey)) {
-            result = true;
             delete cbs[cbKey];
           }
         }
       }
-      return result;
+
+      return me;
     };
 
     Client.prototype.ask = function () {
@@ -284,14 +282,14 @@
       return startExchange(me._client, arguments, me.id);
     };
 
-    // end all exchanges that began with the given type or have the given id
+    // end all exchanges that began with the given phrase or have the given id
     Peer.prototype.endExchange = function (xref) {
       var
         me = this,
         peerId = me.id,
         client = me._client,
         exchanges = me._ax,
-        result = false,
+        cnt = 0,
         endAll = !xref,
         isId,
         xid;
@@ -307,7 +305,7 @@
             exchanges[xid].chain[0] == xref
           ) {
             endExchange(client, peerId, xid);
-            result = true;
+            cnt++;
             if (isId) {
               break;
             }
@@ -315,7 +313,7 @@
         }
       }
 
-      return result;
+      return cnt;
     };
 
     Subetha.msgType.exchange = function (client, peer, customEvent, payload) {
@@ -326,7 +324,7 @@
         midx,
         exchanges,
         peerExchange,
-        type,
+        phrase,
         chain;
 
       // exit when no exchanges are registered - i.e., this client can't host a conversation
@@ -345,10 +343,10 @@
 
       setupExchange(client, xid, pid);
       exchanges = client._ax;
-      type = data.type;
+      phrase = data.phrase;
       midx = data.idx;
       peerExchange = exchanges.xids[xid].pids[pid];
-      chain = chainPrefix + peerExchange.concat(type).join();
+      chain = chainPrefix + peerExchange.concat(phrase).join();
 
       // end convo when...
       if (
@@ -361,28 +359,28 @@
         return;
       }
 
-      // add type to peer exchange
-      peerExchange.push(type);
+      // add phrase to peer exchange
+      peerExchange.push(phrase);
 
-      customEvent.type = type;
+      customEvent.phrase = phrase;
       customEvent.data = data.data;
       // add exchange id
-      customEvent.exchange = xid;
+      customEvent.xid = xid;
       // allow ending this conversation at anytime
       customEvent.end = peerExchange.endFn;
       // allow replying once to this exchange
       customEvent.reply = function () {
         var
           args,
-          type;
+          phrase;
 
         if (protoHas.call(exchanges.xids, xid) && peerExchange.length == midx + 1) {
           args = arguments;
-          type = args[0];
+          phrase = args[0];
           // add reply to this conversation
-          peerExchange.push(type);
+          peerExchange.push(phrase);
           // send reply to peer
-          return sendExchange(client, xid, pid, midx + 1, type, protoSlice.call(args, 1));
+          return sendExchange(client, xid, pid, midx + 1, phrase, protoSlice.call(args, 1));
         }
         return false;
       };
@@ -424,5 +422,5 @@
 }(
   typeof define === 'function',
   typeof exports != 'undefined',
-  Array, Date, Math, JSON, Object, RegExp, this
+  RegExp, this
 );
