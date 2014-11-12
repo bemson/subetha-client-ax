@@ -3,8 +3,8 @@
   "version": "0.0.0-alpha",
   "description": "Define informal protocols with SubEtha messages",
   "main": "src/subetha-client-ax.js",
-  "dependencies": {
-    "subetha": "0.x"
+  "peerDependencies": {
+    "subetha-client": "0.x"
   },
   "keywords": [
     "subetha",
