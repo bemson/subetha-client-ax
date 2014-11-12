@@ -7,9 +7,9 @@ by Bemi Faison
 
 ## Description
 
-SubEtha Ad Hoc-Exchange (AX) is a Subetha-Client plugin that enables binding to a _sequence_ of events between peers. When defined incrementally, these bindings represent an informal communications protocol, to ensure the stateful execution of your logic. (The AX plugin is bundled with the SubEtha module.)
+SubEtha Ad Hoc-Exchange (AX) is a Subetha-Client plugin that enables binding to a _sequence_ of phrases between peers. When defined incrementally, these bindings represent an informal communications protocol, to ensure the stateful execution of your logic. This plugin is bundled with the SubEtha module.
 
-**Note:** Please see the [Subetha (Client) project page](https://github.com/bemson/subetha), for important background information, plus development, implementation, and security considerations.
+**Note:** Please see the [Subetha project page](https://github.com/bemson/subetha), for important background information, plus development, implementation, and security considerations.
 
 ## Usage
 
@@ -17,21 +17,21 @@ AX provides methods to setup, start, teardown, and end an exchange. Keep in mind
 
 ### Setup an exchange
 
-Use the `#adhoc()` method to bind one callback to a sequence of events. The "sequence" is one or more events, listed method arguments. Exchange callbacks receive an _exchange-event object_, which extends the normal SubEtha event-object with exchange-oriented members and methods.
+Use the `#adhoc()` method to bind one callback to a sequence of events (or "phrases"). This is similar to the `Client#on()` method, except you're listening for a specific number and order of event types (or "phrases"). Exchange callbacks receive an _exchange-event object_ to track, progress or end the conversation.
 
 ```js
 var cookbook = new Subetha.Client().open('recipes@public');
 
 cookbook.adhoc('got recipes?', function (convo) {
-  console.log('Peer #%s asked: "%s"', convo.peer.id, convo.type);
+  console.log('Peer #%s asked: "%s"', convo.peer.id, convo.phrase);
   console.log('This is message number %d in this thread', convo.thread.length);
   convo.reply('food group?');
 });
 ```
 
-**Note:** Exchange events will not collide with normal events or event subscribers - i.e., those consumed by `Client#on()`, or created by the methods `Client#emit()` and `Peer#send()`.
+**Note:** Exchange events will not collide with events subscribed to via `Client#on()`.
 
-The string preceding the callback, is what your callback is responding to - similar to the `#on()` method. Any remaining strings reflect the _history_ of events that must occur _before_ responding to the peer event. That is, what you sent before what they sent, and so on, in reverse, alternating order. (AX keeps track of each peer exchange.)
+The last phrase, preceding the callback, is what your logic is responding _to_ - similar to the `Client#on()` method. Any preceding strings represent the _history_ of events that must occur in order to handle the exchange event. That is, what you sent before what they sent, and so on, in reverse, alternating order. (AX keeps track of each peer exchange.)
 
 ```js
 cookbook
@@ -42,15 +42,15 @@ cookbook
   .adhoc('got recipes?', 'food group?', 'dairy', sendRecipe);
 
 function sendRecipe(convo) {
-  convo.reply('cook', 'some', convo.type, 'recipe');
+  convo.reply('cook', 'some', convo.phrase, 'recipe');
 }
 ```
 
-**Note:** As a rule of thumb, callbacks that follow an odd number of events must be initiated by a peer. Callbacks following an even number of events must be initiated by the client.
+**Note:** As a rule of thumb, callbacks that follow an odd number of phrases must be initiated by a peer. Callbacks following an even number of events must be initiated by the client.
 
-### Start an exchange
+### Starting an exchange
 
-Use the `#ask()` method to begin an exchange. This method is available on client and peer instances. Invoking this method on the client will start exchanges with _every_ peer in your channel.
+Use the `#ask()` method to begin an exchange. This method is available on both client and peer instances. Invoking it on the client starts an exchange with every channel peer.
 
 ```js
 var chef = new Subetha.Client().open('recipes@public');
@@ -68,27 +68,31 @@ chef
 chef.ask('got recipes?');
 ```
 
-**Note:** You **must** setup callbacks _before_ starting an exchange, or it will end prematurely.
+**Note:** If the peer has no callback ready for an incoming exchange, it's ended automatically.
 
-#### Respond during an exchange
+#### Responding to an exchange
 
-For each exchange-event object, a closured `#reply()` method exists to forward _that_ moment in the conversation. The signature is the same as `Client#emit()` or `Peer#send()`: an event name and optional arguments.
+The exchange-event object respresents a suspended conversation. It features a closured `#reply()` method to forward the conversation, _responding_ to the last phrase. The signature for this method is similar to that of `Client#fire()`: an arbitrary string (i.e., the phrase) and any number of optional arguments.
 
-Invoking `#reply()` completes your round in the back and forth communication with a peer. You can only reply once per exchange event. The first call will return `true`, and subsequents calls return `false`. If the exchange is somehow ended - for example, due to the peer disconnecting - the method will also return `false`.
+You can only reply once per exchange event. Once done the exchange-object and all it's methods will not impact the conversation. (The one exception is the `#end()` method.) For instance, the first call to `#reply()` returns `true`, while subsequents calls return `false`.
 
-### Teardown an exchange
+### Tearing down an exchange
 
-Use the `#unhoc` method to remove callbacks bound to an exchange thread. Callbacks scheduled after the targeted thread are also removed (since they would no longer be reached in a conversation). Below removes all callbacks for the entire "get recipes?" exchange, on the `chef` instance in the previous section.
+Use the `#unhoc` method to remove callbacks to an exchange. Callbacks bound to sequences beyond the one you target, will also be removed, since they would no longer be reached in a conversation.
+
+Below removes all callbacks for the entire "get recipes?" exchange, from the `chef` instance in the previous section.
 
 ```js
 chef.unhoc('got recipes?');
 ```
 
-**Note:** Do not use `#unhoc` to remove callbacks you intend to replace - the method is intentially destructive. To _swap_ callbacks, simply override the thread using `#adhoc()` again. Only one callback can be bound to an exchange (the existing callback will be discarded).
+**Note:** To alter an exchange, simply assign a new callback to an existing exchange sequence. This _replaces_ the callback while preserving the sequence, and any that were added to it. In other words, do _not_ use `#unhoc` to remove callbacks you intend to replace.
 
-### End an exchange
+### Ending an exchange
 
-Conversations automatically persist between peers, until the last event (sent or received) reaches the end of a client's predefined callbacks. However, you can manually end an exchange, by invoking the exchange-event object's `#end()` method.
+Conversations automatically persist between peers, until the last phrase (sent or received) reaches the end of a client's registered sequence callbacks.
+
+You may also end an exchange manually, with the `#end()` method of any exchange-event object. Below demonstrates manually ending a conversation that turns silly.
 
 ```js
 cookbook.adhoc('got recipes?', 'food group?', 'green eggs and ham', function (convo) {
@@ -96,9 +100,9 @@ cookbook.adhoc('got recipes?', 'food group?', 'green eggs and ham', function (co
 });
 ```
 
-#### When to end an exchange
+#### Knowing when to end an exchange
 
-Lengthy exchanges are generally unnecessary. Instead, you should use small, two or three round exchanges, then add some state to the given peer. Below demonstrates an exchange that "approves" a peer, such that regular events can use this flag in their logic.
+Under the hood, this plugin tracks each exchange, no matter it's length or duration; Lengthy exchanges are generally unnecessary. You should use small, two or three round exchanges, then add some state to the given peer. Below demonstrates an exchange that "approves" a peer, such that other events can use that flag in their logic.
 
 ```js
 var trusty = new Subetha.Client().open('wild-west@public');
@@ -129,56 +133,70 @@ trusty.on('gimme data', function (evt) {
 
 ## API
 
-Below is reference documentation for the SubEtha Ad Hoc-Exchange module - i.e., additions to [SubEtha (Client) module](https://github.com/bemson/subetha).
+Below is reference documentation for the SubEtha Ad Hoc-Exchange module - i.e., additions to [SubEtha-Client module](https://github.com/bemson/subetha).
 
 **Note:** Instance methods are prefixed with a pound-symbol (`#`). Instance properties are prefixed with an at-symbol (`@`). Static members are prefixed with a double-colon (`::`).
 
 ### Subetha::Client
 
-##### Client exchange object
+##### Exchange event object
 
-Exchange callbacks receive an _exchange object_ which adds to the client event object used with event callbacks. Below are additional members from this module.
+Exchange callbacks receive a _peer-event object_, along with any additonal parameters, sent by the peer.
 
-  * `#reply()` - Responds to this thread with this peer; uses the same syntax as `#send()`.
-  * `#end()` - Prevents further receipt or response of messages.
-  * `@thread` - An array of phrases capturing the "conversation". An odd number of phrases means the exchange was started by the peer. Otherwise, it was started by the client.
+  * `end()` - Ends this conversation with this peer.
+  * `reply()` - Responds to this conversation with this peer.
+  * `thread` - A static array of phrases in the "conversation", thus far.
+  * `data` - An array of any additional arguments passed from the `#ask()` method.
+  * `id` - Unique identifier for this exchange event.
+  * `peer` - The peer that sent this phrase.
+  * `sent`:  The time (as a Date instance) when the message was sent.
+  * `timeStamp`: The time (in milliseconds) when the event occurred.
+  * `phrase` - The last string passed via `#ask()` or `#reply()`.
+  * `xid` - Unique identifier of this exchange, as returned by `#ask()`.
+
+An odd number of phrases in the `thread` property, means the exchange was started by the peer. Otherwise, it was started by the client. The zeroeth index represents the first phrase sent.
 
 #### Client#adhoc()
 
-Subscribe to a sequence of events communicated with a peer.
+Subscribe to a sequence of phrases exchanged with a peer.
 
 ```
-client.adhoc(type*, callback);
+client.adhoc(phrase*, callback);
 ```
 
-  * **type**: _(string)_ One or more events, alternating between client and peer - the last is from a peer.
-  * **callback**: _(function)_ A callback to invoke when the sequence of types sent and received are met.
+  * **phrase**: _(string)_ One or more phrases, alternating between client and peer - the last one having come from the peer.
+  * **callback**: _(function)_ A callback to invoke when the sequence of  (sent and received) phrases are met.
 
-Only one callback is allowed per event sequence.
+Only _one_ callback is allowed per event sequence. Reapplying a new callback to an existing sequence, replaces the last one assigned.
+
+Returns the client instance.
 
 #### Client#ask()
 
 Begin an exchange with each peer.
 
 ```
-client.ask(type [, args]);
+client.ask(phrase [, args*]);
 ```
 
-  * **type**: _(string)_ The first event in the exchange.
+  * **phrase**: _(string)_ The first phrase in the exchange.
   * **args**: _(mix)_ Remaining arguments that should be passed to all attached callbacks.
+
+Returns a unique identifier for this exchange. (The identifier may be used to end this exchange with a peer, via `Peer#endExchange()`.)
 
 #### Client#unhoc()
 
-Unsubscribe from a sequence of events.
+Unsubscribe from a sequence of phrases.
 
 ```
-client.unhoc(type, ...);
+client.unhoc(phrase*);
 ```
 
-  * **type**: _(string)_ One or more events, alternating between client and peer - the last is from a peer.
+  * **phrase**: _(string)_ One or more phrases, alternating between client and peer - the last one having come from the peer.
 
-**Note:** Sequences that depend on the removed sequence will also be removed.
+**Note:** Sequences that come _after_ the given sequence are also removed, since they would no longer be reached in an exchange. To _replace_ a callback for a sequence, call `#adhoc()` with the sequence and the replacement callback.
 
+Returns the client instance.
 
 ### Subetha::Peer
 
@@ -187,11 +205,13 @@ client.unhoc(type, ...);
 Begin an exchange with this peer.
 
 ```
-peer.ask(type [, args]);
+peer.ask(phrase [, args*]);
 ```
 
-  * **type**: _(string)_ The first event in the exchange.
+  * **phrase`**: _(string)_ The first message in this exchange.
   * **args**: _(mix)_ Remaining arguments that should be passed to all attached callbacks.
+
+Returns a unique identifier for this exchange. (The identifier may be used to end this exchange with a peer, via `Peer#endExchange()`.)
 
 #### Peer#endExchange()
 
@@ -201,13 +221,13 @@ End one or more exchanges with this peer.
 peer.endExchange([ref]);
 ```
 
-* **ref**: _(string)_ The exchange id or starting type to end. When omitted, all exchanges will end.
+  * **ref**: _(string)_ The exchange id, or initial phrase of the conversation to end. When omitted, all exchanges will be ended.
 
-Returns `true` when one or more exchanges are ended. Otherwise, `false`.
+Returns the number of exchanges ended.
 
 ## Installation
 
-SubEtha AX works within, and is intended for, modern JavaScript browsers. It is available on [bower](http://bower.io/search/?q=subetha-client-ax), [component](http://component.github.io/) and [npm](https://www.npmjs.org/package/subetha-client-ax) as a [CommonJS](http://wiki.commonjs.org/wiki/CommonJS) or [AMD](http://wiki.commonjs.org/wiki/Modules/AsynchronousDefinition) module.
+SubEtha Ad Hoc-Exchange works within, and is intended for, modern JavaScript browsers. It is available on [bower](http://bower.io/search/?q=subetha-client-ax), [component](http://component.github.io/) and [npm](https://www.npmjs.org/package/subetha-client-ax) as a [CommonJS](http://wiki.commonjs.org/wiki/CommonJS) or [AMD](http://wiki.commonjs.org/wiki/Modules/AsynchronousDefinition) module.
 
 If SubEtha Ad Hoc-Exchange isn't compatible with your favorite runtime, please file an issue or pull-request (preferred).
 
@@ -215,14 +235,14 @@ If SubEtha Ad Hoc-Exchange isn't compatible with your favorite runtime, please f
 
 SubEtha AX depends on the following modules:
 
-  * [SubEtha](https://github.com/bemson/subetha)
+  * [SubEtha-Client](https://github.com/bemson/subetha-client)
 
 ### Web Browsers
 
 Use a `<SCRIPT>` tag to load the _subetha-client-ax.min.js_ file in your web page. The file does _not_ include the SubEtha-Client module. You must include this as well, _before_ loading this plugin, which updates members of the `Subetha` namespace, in the global scope.
 
 ```html
-  <script type="text/javascript" src="path/to/subetha.min.js"></script>
+  <script type="text/javascript" src="path/to/subetha-client.min.js"></script>
   <script type="text/javascript" src="path/to/subetha-client-ax.min.js"></script>
   <script type="text/javascript">
     // ... SubEtha dependent code ...
@@ -231,13 +251,15 @@ Use a `<SCRIPT>` tag to load the _subetha-client-ax.min.js_ file in your web pag
 
 **Note:** The minified file was compressed by [Closure Compiler](http://closure-compiler.appspot.com/).
 
-Generally speaking, the standalone version of this plugin should not be installed manually, since it's bundled with the SubEtha-Client module.
+Generally speaking, the standalone version of this plugin should not be installed manually, since it's bundled with the SubEtha module. Install the [SubEtha module](https://github.com/bemson/subetha) instead - a rollup of the SubEtha-Client and recommended plugins.
 
 ### Package Managers
 
   * `npm install subetha-client-ax`
   * `component install bemson/subetha-client-ax`
   * `bower install subetha-client-ax`
+
+**Note:** The npm package uses `subetha-client` as a [peerDependency](https://www.npmjs.org/doc/files/package.json.html#peerdependencies).
 
 ### AMD
 
