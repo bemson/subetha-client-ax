@@ -2,7 +2,6 @@
 
 Define informal protocols with SubEtha messages
 
-version 0.0.1-alpha
 by Bemi Faison
 
 ## Description
@@ -149,7 +148,6 @@ Exchange callbacks receive a _peer-event object_, along with any additonal param
   * `data` - An array of any additional arguments passed from the `#ask()` method.
   * `id` - Unique identifier for this exchange event.
   * `peer` - The peer that sent this phrase.
-  * `sent`:  The time (as a Date instance) when the message was sent.
   * `timeStamp`: The time (in milliseconds) when the event occurred.
   * `phrase` - The last string passed via `#ask()` or `#reply()`.
   * `xid` - Unique identifier of this exchange, as returned by `#ask()`.
