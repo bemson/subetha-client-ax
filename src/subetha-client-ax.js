@@ -6,7 +6,7 @@
  * Released under the Apache License
  */
 /* global define, require */
-!function (inAMD, inCJS, RegExp, scope, undefined) {
+!function (inAMD, inCJS, Array, RegExp, scope, undefined) {
 
   function initSubEthaAX() {
 
@@ -16,11 +16,21 @@
       Client = subetha.Client,
       Peer = subetha.Peer,
       chainPrefix = '=',
+
       protoSlice = Array.prototype.slice,
       protoHas = Object.prototype.hasOwnProperty,
+
       DISCONNECT_EVENT = '::disconnect',
-      ENDEXCHANGE_EVENT = '::endExchange',
-      EXCHANGE_EVENT = '::exchange'
+      ENDEXCHANGE_EVENT = '::exchange-end',
+      MSG_TYPE_EXCHANGE = 'subetha/exchange',
+      EX_DATA_PREFIX = '_ax',
+
+
+      isArray = typeof Array.isArray === 'function' ?
+        Array.isArray :
+        function (obj) {
+          return obj instanceof Array;
+        }
     ;
 
     // Utility
@@ -34,6 +44,10 @@
         ary.push(key);
       }
       return ary;
+    }
+
+    function isFullString(value) {
+      return value && typeof value === 'string';
     }
 
     // Functions
@@ -82,12 +96,13 @@
     function setupExchange(client, xid, pid) {
       var
         pids,
-        result;
+        result,
+        exchanges;
 
       // init client
-      if (!protoHas.call(client, '_ax')) {
+      if (!protoHas.call(client, EX_DATA_PREFIX)) {
         result =
-        client._ax =
+        client[EX_DATA_PREFIX] =
           {
             // active exchanges
             xids: {},
@@ -98,10 +113,12 @@
         client.on(DISCONNECT_EVENT, destroyClient);
       }
 
+      exchanges = client[EX_DATA_PREFIX];
+
       // add tracker for this exchange
-      if (xid && !protoHas.call(client._ax.xids, xid)) {
+      if (xid && !protoHas.call(exchanges.xids, xid)) {
         result =
-        client._ax.xids[xid] =
+        exchanges.xids[xid] =
           {
             pids: {},
             cnt: 0
@@ -109,15 +126,15 @@
       }
 
       // start chain for the given peer - if any
-      if (pid && !protoHas.call(client._ax.xids[xid].pids, pid)) {
-        client._ax.xids[xid].cnt++;
+      if (pid && !protoHas.call(exchanges.xids[xid].pids, pid)) {
+        exchanges.xids[xid].cnt++;
         pids = [];
         // shared function to end this exchange
         pids.endFn = function () {
           return !!endExchange(client, xid, pid);
         };
         result =
-        client._ax.xids[xid].pids[pid] =
+        exchanges.xids[xid].pids[pid] =
           pids;
       }
 
@@ -125,7 +142,8 @@
     }
 
     function sendExchange(client, xid, pid, idx, phrase, data) {
-      return client._transmit('exchange',
+      return client._transmit(
+        MSG_TYPE_EXCHANGE,
         pid,
         {
           // identifier
@@ -144,7 +162,7 @@
     function destroyClient() {
       var
         me = this,
-        exchanges = me._ax.xids,
+        exchanges = me[EX_DATA_PREFIX].xids,
         xid;
 
       // remove listener
@@ -157,7 +175,7 @@
       }
 
       // clean up
-      delete me._ax;
+      delete me[EX_DATA_PREFIX];
     }
 
     function removePeerExchange(client, xid, pid) {
@@ -166,13 +184,13 @@
         exchange,
         peerExchange;
 
-      if (!protoHas.call(client, '_ax')) {
+      if (!protoHas.call(client, EX_DATA_PREFIX)) {
         // exit if there is no exchange for this peer
         return;
       }
 
       // alias this exchange
-      exchanges = client._ax.xids;
+      exchanges = client[EX_DATA_PREFIX].xids;
       exchange = exchanges[xid];
 
       // if there is no peerExchange
@@ -208,7 +226,7 @@
     function killExchange(client, xid, pid) {
       // end exchange with given peer(s)
       return client._transmit(
-        'exchange',
+        MSG_TYPE_EXCHANGE,
         pid,
         {
           xid: xid,
@@ -231,7 +249,7 @@
         typeof cb == 'function'
       ) {
         setupExchange(me);
-        me._ax.cbs[chainPrefix + protoSlice.call(args, 0, -1).join()] = cb;
+        me[EX_DATA_PREFIX].cbs[chainPrefix + protoSlice.call(args, 0, -1).join()] = cb;
       }
 
       return me;
@@ -246,7 +264,7 @@
         cbs,
         cbKey;
 
-      if (protoHas.call(me, '_ax')) {
+      if (protoHas.call(me, EX_DATA_PREFIX)) {
 
         args = protoSlice.call(arguments);
 
@@ -259,7 +277,7 @@
         chain = chainPrefix + args.join();
         chainRxp = new RegExp('^' + chain);
         // alias callbacks
-        cbs = me._ax.cbs;
+        cbs = me[EX_DATA_PREFIX].cbs;
 
         // prune all chains prefixed with this regexp
         for (cbKey in cbs) {
@@ -288,7 +306,7 @@
         me = this,
         peerId = me.id,
         client = me._client,
-        exchanges = me._ax,
+        exchanges = me[EX_DATA_PREFIX],
         cnt = 0,
         endAll = !xref,
         isId,
@@ -316,35 +334,51 @@
       return cnt;
     };
 
-    Subetha.msgType.exchange = function (client, peer, customEvent, payload) {
+    Subetha.msgType[MSG_TYPE_EXCHANGE] = function (client, peer, payload, details) {
       var
-        data = payload.msg.data,
-        xid = data.xid,
         pid = peer.id,
+        args,
+        xid,
         midx,
         exchanges,
         peerExchange,
         phrase,
-        chain;
+        chain,
+        customEvent;
+
+      // ignore when payload doesn't meet minimum
+      if (
+        typeof payload != 'object' ||
+        !isFullString(xid = payload.xid)
+      ) {
+        return;
+      }
 
       // exit when no exchanges are registered - i.e., this client can't host a conversation
-      if (!protoHas.call(client, '_ax')) {
+      if (!protoHas.call(client, EX_DATA_PREFIX)) {
         endExchange(client, xid, pid);
         return;
       }
 
       // exit when told to end exchange
-      if (protoHas.call(data, 'xkill')) {
+      if (protoHas.call(payload, 'xkill')) {
         // discard tracker for exchange with this peer
         removePeerExchange(client, xid, pid);
         return;
       }
 
+      // exit if remaining structure is invalid
+      if (
+        typeof (midx = payload.idx) != 'number' ||
+        !isFullString(phrase = payload.phrase) ||
+        !isArray(args = payload.data)
+      ) {
+        endExchange(client, xid, pid);
+        return;
+      }
 
       setupExchange(client, xid, pid);
-      exchanges = client._ax;
-      phrase = data.phrase;
-      midx = data.idx;
+      exchanges = client[EX_DATA_PREFIX];
       peerExchange = exchanges.xids[xid].pids[pid];
       chain = chainPrefix + peerExchange.concat(phrase).join();
 
@@ -362,47 +396,40 @@
       // add phrase to peer exchange
       peerExchange.push(phrase);
 
-      customEvent.phrase = phrase;
-      customEvent.data = data.data;
-      // add exchange id
-      customEvent.xid = xid;
-      // allow ending this conversation at anytime
-      customEvent.end = peerExchange.endFn;
-      // allow replying once to this exchange
-      customEvent.reply = function () {
-        var
-          args,
-          phrase;
+      // build custom event
+      customEvent = {
+        end: peerExchange.endFn,
+        reply: function () {
+          var
+            args,
+            phrase;
 
-        if (protoHas.call(exchanges.xids, xid) && peerExchange.length == midx + 1) {
-          args = arguments;
-          phrase = args[0];
-          // add reply to this conversation
-          peerExchange.push(phrase);
-          // send reply to peer
-          return sendExchange(client, xid, pid, midx + 1, phrase, protoSlice.call(args, 1));
-        }
-        return false;
+          if (protoHas.call(exchanges.xids, xid) && peerExchange.length == midx + 1) {
+            args = arguments;
+            phrase = args[0];
+            // add reply to this conversation
+            peerExchange.push(phrase);
+            // send reply to peer
+            return sendExchange(client, xid, pid, midx + 1, phrase, protoSlice.call(args, 1));
+          }
+          return false;
+        },
+        thread: peerExchange.concat(),
+        data: args,
+        id: details.id,
+        peer: peer,
+        timeStamp: details.timeStamp,
+        phrase: phrase,
+        xid: xid
       };
-      // expose chain
-      customEvent.thread = peerExchange.concat();
 
-      // acknowledge exchange event
-      client.fire(EXCHANGE_EVENT, customEvent, client.peers[pid]);
+      // get exchange callback
+      cb = exchanges.cbs[chain];
 
-      // if the callback is still here...
-      if (protoHas.call(exchanges.cbs, chain)) {
-        // get exchange callback
-        cb = exchanges.cbs[chain];
-
-        if (data.data.length) {
-          cb.apply(client, [customEvent].concat(data.data));
-        } else {
-          cb.call(client, customEvent);
-        }
+      if (args.length) {
+        cb.apply(client, [customEvent].concat(args));
       } else {
-        // die without a callback
-        endExchange(client, xid, pid);
+        cb.call(client, customEvent);
       }
 
     };
@@ -422,5 +449,5 @@
 }(
   typeof define === 'function',
   typeof exports != 'undefined',
-  RegExp, this
+  Array, RegExp, this
 );
