@@ -2,7 +2,7 @@
   "name": "subetha-client-ax",
   "repository": "bemson/subetha-client-ax",
   "description": "Define informal protocols with SubEtha messages",
-  "version": "0.0.1-alpha",
+  "version": "0.0.2-alpha",
   "keywords": [
     "subetha",
     "plugin",

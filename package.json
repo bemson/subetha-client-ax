@@ -1,6 +1,6 @@
 {
   "name": "subetha-client-ax",
-  "version": "0.0.1-alpha",
+  "version": "0.0.2-alpha",
   "description": "Define informal protocols with SubEtha messages",
   "main": "src/subetha-client-ax.js",
   "peerDependencies": {
