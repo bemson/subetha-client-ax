@@ -99,6 +99,17 @@ cookbook.adhoc('got recipes?', 'food group?', 'green eggs and ham', function (co
 });
 ```
 
+For any exchange ended - whether by the peer or client - an _::exchange-end_ event is fired. The event contains the peer, exchange identifier, and the thread of phrases in the conversation.
+
+```js
+client.on('::exchange-end', function (peer, xid, thread) {
+  if (peer.origin == 'friend.example.com') {
+    console.log('lost touch with friend!');
+    console.log('the last message shared was "%s"', thread[thread.length - 1]);
+  }
+});
+```
+
 #### Knowing when to end an exchange
 
 Under the hood, this plugin tracks each exchange, no matter it's length or duration; Lengthy exchanges are generally unnecessary. You should use small, two or three round exchanges, then add some state to the given peer. Below demonstrates an exchange that "approves" a peer, such that other events can use that flag in their logic.

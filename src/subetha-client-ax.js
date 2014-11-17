@@ -21,7 +21,7 @@
       protoHas = Object.prototype.hasOwnProperty,
 
       DISCONNECT_EVENT = '::disconnect',
-      ENDEXCHANGE_EVENT = '::exchange-end',
+      EXCHANGE_END_EVENT = '::exchange-end',
       MSG_TYPE_EXCHANGE = 'subetha/exchange',
       EX_DATA_PREFIX = '_ax',
 
@@ -182,6 +182,7 @@
       var
         exchanges,
         exchange,
+        peer,
         peerExchange;
 
       if (!protoHas.call(client, EX_DATA_PREFIX)) {
@@ -209,13 +210,15 @@
       if (!--exchange.cnt) {
         delete exchanges[xid];
       }
+      peer = client.peers[pid];
       // inform client that this exchange has ended
-      fireEndExchangeEvent(client.peers[pid], peerExchange);
+      peer._client.fire(
+        EXCHANGE_END_EVENT,
+        peer,
+        xid,
+        peerExchange.concat()
+      );
       return 1;
-    }
-
-    function fireEndExchangeEvent(peer, chain) {
-      peer._client.fire(ENDEXCHANGE_EVENT, peer, chain.concat());
     }
 
     function endExchange(client, xid, pid) {
